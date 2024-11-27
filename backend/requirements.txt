@@ -1,0 +1,11 @@
+flask==2.3.2
+flask-cors==4.0.0
+pymongo==4.3.3
+openai==0.27.8
+python-dotenv==1.0.0
+gunicorn==20.1.0
+requests==2.31.0
+pydub==0.25.1
+elevenlabs==0.2.24
+mongoengine==0.27.0
+cloudinary==1.33.0
