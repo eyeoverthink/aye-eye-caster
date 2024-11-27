@@ -15,25 +15,29 @@ const podcastSchema = new mongoose.Schema({
     },
     thumbnail_url: {
         type: String,
+        required: false,
+        default: null
+    },
+    images: [{
+        url: String,
+        timestamp: Number,
+        prompt: String
+    }],
+    voice_id: {
+        type: String,
         required: true
     },
-    voice: {
-        type: String,
-        default: 'adam'
+    voice_settings: {
+        stability: Number,
+        similarityBoost: Number,
+        style: Number
     },
-    language: {
-        type: String,
-        default: 'english'
-    },
-    plays: {
+    additional_context: String,
+    views: {
         type: Number,
         default: 0
     },
     likes: {
-        type: Number,
-        default: 0
-    },
-    shares: {
         type: Number,
         default: 0
     }

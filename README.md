@@ -79,6 +79,71 @@ The application will be available at:
 - Frontend: http://localhost:3000
 - Backend: http://localhost:3030
 
+## How It Works
+
+The AI Podcast Generator uses a React frontend to interact with a Node.js backend that orchestrates the podcast generation process:
+
+1. **Script Generation**
+   - Input your podcast topic and preferences through the web interface
+   - The backend uses OpenAI's GPT-3.5 to generate an engaging script
+   - You can customize the length, style, and tone of the script
+
+2. **Voice Selection**
+   - Choose from a variety of AI voices provided by ElevenLabs
+   - Customize voice settings like stability and style
+   - Preview voices before generating the full podcast
+
+3. **Image Generation**
+   - Automatically generates podcast cover art using DALL-E 3
+   - Option to customize image prompts or let AI generate them from the script
+   - Multiple images can be generated with specific timings for visual storytelling
+
+4. **Audio Processing**
+   - Converts the script to natural-sounding speech using ElevenLabs
+   - Handles audio processing and storage through Cloudinary
+   - Provides a Spotify-like player interface for playback
+
+## API Endpoints
+
+The backend server (running on port 3030) provides the following REST endpoints:
+
+### Script Generation
+- `POST /generate-script`
+  - Generates a podcast script based on your topic
+  - Request body: 
+    ```json
+    {
+      "topic": "Your podcast topic",
+      "length": "short|medium|long",
+      "tone": "casual|professional|entertaining"
+    }
+    ```
+
+### Voice Management
+- `GET /voices`
+  - Fetches available voices from ElevenLabs
+  - Returns list of voices with preview URLs
+
+### Podcast Generation
+- `POST /generate-podcast`
+  - Creates a complete podcast with script, audio, and images
+  - Request body:
+    ```json
+    {
+      "script": "Generated or custom script",
+      "voiceId": "selected_voice_id",
+      "voiceSettings": {
+        "stability": 0.5,
+        "similarityBoost": 0.5,
+        "style": 0.5
+      },
+      "imageSettings": {
+        "generateFromScript": true,
+        "customPrompts": []
+      }
+    }
+    ```
+
 ## Usage
 
 1. Enter a topic for your podcast in the input field
@@ -92,6 +157,26 @@ The application will be available at:
    - Download the audio file
    - View the transcript
    - See the AI-generated thumbnail
+
+## Common Workflows
+
+1. **Quick Podcast Generation**
+   - Visit http://localhost:3000
+   - Enter your topic in the main input field
+   - Click "Generate Podcast"
+   - Wait for the complete podcast to be generated
+
+2. **Custom Podcast Creation**
+   - Use the advanced settings panel
+   - Select specific voice and customize settings
+   - Add custom image prompts if desired
+   - Generate and preview the script
+   - Proceed with podcast generation
+
+3. **Managing Generated Content**
+   - All generated podcasts are saved automatically
+   - Access your podcast library from the main interface
+   - Download, share, or delete podcasts as needed
 
 ## Recent Updates
 
