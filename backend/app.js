@@ -36,16 +36,42 @@ cloudinary.config({
 // Connect to MongoDB
 connectDB();
 
-// Generate Podcast Endpoint
-app.post('/generate-podcast', async (req, res) => {
+// Function to fetch and upload DALL-E image to Cloudinary
+async function fetchAndUploadImage(imageUrl) {
     try {
-        console.log('Received request:', req.body);
-        const { topic, voice = '21m00Tcm4TlvDq8ikWAM', language = 'English' } = req.body;
+        // Download the image as a buffer
+        const imageResponse = await axios({
+            url: imageUrl,
+            responseType: 'arraybuffer',
+            headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            }
+        });
 
-        if (!topic) {
-            return res.status(400).json({ error: 'Topic is required' });
-        }
+        // Convert buffer to base64
+        const base64Image = Buffer.from(imageResponse.data).toString('base64');
+        const dataURI = `data:image/png;base64,${base64Image}`;
 
+        // Upload to Cloudinary
+        const uploadResult = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload(dataURI, {
+                folder: 'podcast_thumbnails'
+            }, (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+            });
+        });
+
+        return uploadResult.secure_url;
+    } catch (error) {
+        console.error('Error in fetchAndUploadImage:', error);
+        throw new Error('Failed to process image: ' + error.message);
+    }
+}
+
+// Function to generate podcast script
+async function generatePodcastScript(topic) {
+    try {
         console.log('Generating script with OpenAI...');
         const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
@@ -68,11 +94,20 @@ app.post('/generate-podcast', async (req, res) => {
 
         const script = completion.choices[0].message.content;
         console.log('Script generated successfully');
+        return script;
+    } catch (error) {
+        console.error('Error generating script:', error);
+        throw new Error('Failed to generate script: ' + error.message);
+    }
+}
 
+// Function to generate audio
+async function generateAudio(script) {
+    try {
         console.log('Generating audio with ElevenLabs...');
         const response = await axios({
             method: 'POST',
-            url: `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
+            url: `https://api.elevenlabs.io/v1/text-to-speech/${'21m00Tcm4TlvDq8ikWAM'}`,
             headers: {
                 'Accept': 'audio/mpeg',
                 'xi-api-key': process.env.ELEVENLABS_API_KEY,
@@ -90,62 +125,106 @@ app.post('/generate-podcast', async (req, res) => {
         });
 
         console.log('Audio generated successfully');
+        return response.data;
+    } catch (error) {
+        console.error('Error generating audio:', error);
+        throw new Error('Failed to generate audio: ' + error.message);
+    }
+}
 
-        // Save audio temporarily
-        const tempPath = path.join(__dirname, `temp_${Date.now()}.mp3`);
-        fs.writeFileSync(tempPath, response.data);
-        console.log('Audio saved temporarily');
+// Function to upload audio to Cloudinary
+async function uploadAudioToCloudinary(audioBuffer) {
+    try {
+        console.log('Uploading audio to Cloudinary...');
+        const uploadResponse = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload_stream(
+                {
+                    folder: "podcasts",
+                    resource_type: "video"
+                },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            ).end(audioBuffer);
+        });
+
+        console.log('Audio uploaded to Cloudinary');
+        return uploadResponse;
+    } catch (error) {
+        console.error('Error uploading audio:', error);
+        throw new Error('Failed to upload audio: ' + error.message);
+    }
+}
+
+// Generate Podcast Endpoint
+app.post('/generate-podcast', async (req, res) => {
+    try {
+        const { topic } = req.body;
+
+        if (!topic) {
+            return res.status(400).json({ error: 'Topic is required' });
+        }
+
+        console.log('Generating script...');
+        const script = await generatePodcastScript(topic);
+
+        console.log('Generating audio...');
+        const audioBuffer = await generateAudio(script);
 
         console.log('Uploading audio to Cloudinary...');
-        const audioUpload = await cloudinary.uploader.upload(tempPath, {
-            resource_type: "video",
-            folder: "podcasts"
-        });
-        console.log('Audio uploaded to Cloudinary');
-
-        // Clean up temp file
-        fs.unlinkSync(tempPath);
+        const audioUpload = await uploadAudioToCloudinary(audioBuffer);
 
         console.log('Generating thumbnail with DALL-E...');
         const thumbnailResponse = await openai.images.generate({
-            prompt: `A professional podcast cover art for a podcast about ${topic}. Modern, minimal style.`,
+            model: "dall-e-3",
+            prompt: `Create a podcast cover art for a topic about: ${topic}. Modern, professional style with subtle imagery.`,
             n: 1,
-            size: "1024x1024"
+            size: "1024x1024",
+            response_format: "b64_json"  // Request base64 format
         });
-        console.log('Thumbnail generated');
 
         console.log('Uploading thumbnail to Cloudinary...');
-        const thumbnailUpload = await cloudinary.uploader.upload(thumbnailResponse.data[0].url, {
-            folder: "podcast_thumbnails"
+        // Upload base64 image directly to Cloudinary
+        const thumbnailUpload = await new Promise((resolve, reject) => {
+            cloudinary.uploader.upload(
+                `data:image/png;base64,${thumbnailResponse.data[0].b64_json}`,
+                {
+                    folder: "podcast_thumbnails",
+                    resource_type: "image"
+                },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            );
         });
-        console.log('Thumbnail uploaded');
 
-        console.log('Saving to MongoDB...');
-        const podcast = await Podcast.create({
+        console.log('Creating podcast document...');
+        const podcast = new Podcast({
             topic,
-            script,
-            audio_path: audioUpload.secure_url,
+            audio_url: audioUpload.secure_url,
             thumbnail_url: thumbnailUpload.secure_url,
-            voice,
-            language
+            script
         });
-        console.log('Saved to MongoDB');
+
+        await podcast.save();
 
         res.json({
-            message: "Podcast generated successfully",
             podcast: {
                 id: podcast._id,
                 topic: podcast.topic,
-                audio_url: podcast.audio_path,
+                audio_url: podcast.audio_url,
                 thumbnail_url: podcast.thumbnail_url,
-                script: podcast.script
+                script: podcast.script,
+                createdAt: podcast.createdAt
             }
         });
     } catch (error) {
-        console.error('Error generating podcast:', error);
-        res.status(500).json({ 
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        console.error('Error in generate-podcast:', error);
+        res.status(500).json({
+            error: 'Failed to generate podcast',
+            details: error.message
         });
     }
 });
@@ -159,6 +238,17 @@ app.get('/trending-podcasts', async (req, res) => {
         res.json(podcasts);
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Get all podcasts
+app.get('/podcasts', async (req, res) => {
+    try {
+        const podcasts = await Podcast.find().sort({ createdAt: -1 }).limit(10);
+        res.json(podcasts);
+    } catch (error) {
+        console.error('Error fetching podcasts:', error);
+        res.status(500).json({ error: 'Failed to fetch podcasts' });
     }
 });
 

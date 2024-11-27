@@ -9,7 +9,7 @@ const podcastSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    audio_path: {
+    audio_url: {
         type: String,
         required: true
     },
@@ -19,11 +19,11 @@ const podcastSchema = new mongoose.Schema({
     },
     voice: {
         type: String,
-        required: true
+        default: 'adam'
     },
     language: {
         type: String,
-        required: true
+        default: 'english'
     },
     plays: {
         type: Number,
